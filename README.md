@@ -22,3 +22,4 @@ assistance of Claude Opus 5.5 (Anthropic), October 2026 based on a simple Excel 
 Code: MIT. Documentation: CC BY 4.0.
 
 ## Cite as
+https://doi.org/10.5281/zenodo.23195434
