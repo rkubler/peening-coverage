@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="Dr Régis Kubler, Arts et Métiers Institute of Technology">
+<meta name="description" content="Interactive educational simulator of shot peening coverage: swept jet, random impacts, shot size distribution, Poisson model.">
+</head>
+<body>
+<title>Shot Peening Coverage Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: test bench — zoomed surface view (left) + swept part, measurements and curve (right), then parameters and calculation chain */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --ink:#17202a; --muted:#5b6672; --line:#d3d9df;
+  --accent:#d4621c; --theory:#1f5a96; --bare:#e5484d; --soft:#f6f8fa;
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#11161c; --surface:#19212a; --ink:#e6ebf0; --muted:#9aa6b2; --line:#2b3642;
+  --accent:#f08a4b; --theory:#6aa7e6; --bare:#ff6b6f; --soft:#1e2731; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161c; --surface:#19212a; --ink:#e6ebf0; --muted:#9aa6b2; --line:#2b3642;
+  --accent:#f08a4b; --theory:#6aa7e6; --bare:#ff6b6f; --soft:#1e2731; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;padding-inline:16px;padding-block:20px 40px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header h1{font-family:var(--f-display);font-weight:800;font-size:clamp(1.5rem,3vw,2.1rem);letter-spacing:-.01em;margin:0;text-wrap:balance}
+header p{margin:.3rem 0 0;color:var(--muted);max-width:75ch}
+header p.byline{margin:0 0 .35rem;font-size:13px;letter-spacing:.01em}
+header p.byline b{color:var(--ink);font-weight:600}
+footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:4px}
+.formula{font-family:var(--f-mono);color:var(--ink);white-space:nowrap}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+button{font:600 14px var(--f-body);border:1px solid var(--line);background:var(--soft);color:var(--ink);border-radius:8px;padding:7px 13px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;min-width:7.5em}
+select{font:500 14px var(--f-body);background:var(--soft);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.bar label{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
+.bar .sep{flex:1}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.panel h2{font-family:var(--f-display);font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+canvas{display:block;width:100%;border-radius:6px}
+#zoom{aspect-ratio:1/1;max-width:100%;background:#b9bfc6}
+#macro{aspect-ratio:5.2/3.7;max-width:100%}
+.phase{font-size:14px;min-height:3em;background:var(--soft);border-radius:8px;padding:8px 10px}
+.phase b{color:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted);align-items:center}
+.ramp{display:inline-block;width:90px;height:10px;border-radius:3px;vertical-align:middle}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.reads{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.read{background:var(--soft);border-radius:8px;padding:8px 10px}
+.read .k{font-size:12px;color:var(--muted);line-height:1.3}
+.read .v{font-family:var(--f-mono);font-size:18px;font-weight:500;font-variant-numeric:tabular-nums}
+.read.hl .v{color:var(--accent)}
+.read.th .v{color:var(--theory)}
+#chart{width:100%;height:auto;display:block}
+#chart text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+.params{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px 18px}
+.param label{display:flex;justify-content:space-between;font-size:14px;gap:8px}
+.param output{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+.param input[type=range]{width:100%;accent-color:var(--accent)}
+.note{font-size:13px;color:var(--muted);margin:0}
+ol.chain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;counter-reset:st}
+ol.chain li{counter-increment:st;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:4px 10px;align-items:baseline;padding:8px 10px;border-radius:8px;border:1px solid transparent;transition:background .25s,border-color .25s}
+ol.chain li::before{content:counter(st);font-family:var(--f-mono);font-weight:500;color:var(--muted);grid-row:span 2}
+ol.chain li.on{background:var(--soft);border-color:var(--accent)}
+ol.chain li.on::before{color:var(--accent)}
+.chain .t{font-weight:600}
+.chain .val{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.chain .f{grid-column:2 / span 2;font-family:var(--f-mono);font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+@media (prefers-reduced-motion:reduce){ol.chain li{transition:none}}
+#heat{aspect-ratio:1/1;max-width:100%;cursor:crosshair;image-rendering:pixelated}
+#hist,#sizes{width:100%;height:auto;display:block}
+#sizes text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+#hist text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+.scale{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.scale span.c{display:inline-flex;flex-direction:column;align-items:center;gap:2px}
+.scale span.c i{display:block;width:16px;height:12px;border-radius:2px}
+.scrub{display:flex;gap:10px;align-items:center;font-size:14px}
+.scrub input{flex:1;accent-color:var(--accent)}
+.scrub output{font-family:var(--f-mono);min-width:5.5em;text-align:right}
+#hover{font-family:var(--f-mono);font-size:13px;min-height:1.4em;color:var(--ink)}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="byline"><b>Dr Régis Kubler</b>, Arts et Métiers Institute of Technology · Developed with the assistance of Claude Opus 5.5 (Anthropic), October 2026</p>
+  <h1>Shot Peening Coverage Simulator</h1>
+  <p>The jet sweeps the part at traverse speed V. Each shot leaves a circular dent of radius r. The surface actually covered is measured and compared with the model <span class="formula">τ(n) = 100·(1 − e<sup>−K·n</sup>)</span>.</p>
+</header>
+
+<div class="bar" role="toolbar" aria-label="Animation controls">
+  <button id="play" class="primary">▶ Play</button>
+  <button id="step">+1 pass</button>
+  <button id="all">Run all</button>
+  <button id="reset">Restart</button>
+  <span class="sep"></span>
+  <label for="speed">Animation speed
+    <select id="speed"><option value="0.5">×0.5</option><option value="1" selected>×1</option><option value="2">×2</option><option value="4">×4</option></select></label>
+  <label><input type="checkbox" id="ff" checked> Fast-forward outside the zone</label>
+  <label><input type="checkbox" id="bare"> Show unimpacted surface</label>
+</div>
+
+<div class="grid">
+  <section class="panel" aria-label="Zoomed view">
+    <h2>Observed area, microscope view</h2>
+    <canvas id="zoom" aria-label="Observed square area with impact dents"></canvas>
+    <div class="legend">
+      <span>Colour = pass number: <span class="ramp" id="ramp"></span> <span id="rampLbl">1 → 15</span></span>
+      <span><span class="sw" style="background:var(--bare)"></span>surface not yet impacted (option)</span>
+    </div>
+    <p class="note" id="zoneNote"></p>
+    <div class="phase" id="phase" aria-live="polite"></div>
+    <div class="reads">
+      <div class="read"><div class="k">Completed passes n</div><div class="v" id="rN">0</div></div>
+      <div class="read"><div class="k">Impacts received per mm²</div><div class="v" id="rDens">0</div></div>
+      <div class="read"><div class="k">λ = Σ dent areas / surface</div><div class="v" id="rLam">0</div></div>
+      <div class="read hl"><div class="k">Measured coverage (pixel count)</div><div class="v" id="rMeas">0 %</div></div>
+      <div class="read th"><div class="k">Predicted coverage 100·(1 − e<sup>−λ</sup>)</div><div class="v" id="rTh">0 %</div></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Sweep and measurements">
+    <h2>Jet sweeping the part</h2>
+    <canvas id="macro" aria-label="Square part swept line by line by the jet"></canvas>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--theory)"></span>model 100·(1 − e<sup>−Kn</sup>)</span>
+      <span><span class="sw" style="background:var(--accent);border-radius:50%"></span>simulation</span>
+      <span><span class="sw" style="background:var(--muted);height:2px"></span>no overlap: 100·K·n</span>
+    </div>
+    <svg id="chart" viewBox="0 0 560 290" role="img" aria-label="Coverage versus number of passes"></svg>
+  </section>
+</div>
+
+<div class="grid">
+  <section class="panel" aria-label="Impact count map">
+    <h2>Map: how many times each point was hit</h2>
+    <canvas id="heat" aria-label="Map of the number of impacts received by each point of the observed area"></canvas>
+    <div class="scale" id="scale"></div>
+    <div id="hover">Hover over the map to read the number of impacts at a point.</div>
+    <div class="scrub"><label for="mapN">Map after</label><input type="range" id="mapN" min="0" max="0" step="1" value="0"><output id="mapNo">0 passes</output></div>
+    <p class="note">Same area as the microscope view. During the animation the map follows the current pass. At the end, the slider replays the map after any pass, up to the maximum number of passes.</p>
+  </section>
+  <section class="panel" aria-label="Distribution of the number of impacts">
+    <h2>Distribution: share of the surface hit k times</h2>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--accent)"></span>simulation (map)</span>
+      <span><span class="sw" style="background:var(--theory);border-radius:50%"></span>Poisson law e<sup>−λ</sup>λ<sup>k</sup>/k!</span>
+    </div>
+    <svg id="hist" viewBox="0 0 560 300" role="img" aria-label="Histogram of impacts per point"></svg>
+    <div class="reads">
+      <div class="read"><div class="k">Mean impacts per point</div><div class="v" id="hMean">0</div></div>
+      <div class="read th"><div class="k">Predicted: λ = K · n</div><div class="v" id="hLam">0</div></div>
+      <div class="read"><div class="k">Most-hit point</div><div class="v" id="hMax">0</div></div>
+      <div class="read hl"><div class="k">Never-hit surface (k = 0)</div><div class="v" id="hZero">100 %</div></div>
+    </div>
+    <p class="note">The k = 0 bar is the unimpacted surface: its theoretical height e<sup>−Kn</sup> gives the coverage directly, τ = 100·(1 − e<sup>−Kn</sup>). The other bars show over-peening: at 98 % coverage a point has received about 4 impacts on average.</p>
+  </section>
+</div>
+
+<div class="grid">
+  <section class="panel" aria-label="Parameters">
+    <h2>Parameters (defaults = reference Excel model)</h2>
+    <div class="params" id="params"></div>
+    <h2>Shot size distribution</h2>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--theory)"></span>by number of particles</span>
+      <span><span class="sw" style="background:var(--accent)"></span>by mass (what sieving gives)</span>
+    </div>
+    <svg id="sizes" viewBox="0 0 560 210" role="img" aria-label="Shot diameter distribution"></svg>
+    <p class="note" id="sizeNote"></p>
+    <div><button id="defaults">Reset to reference values</button></div>
+    <p class="note">Changing a parameter restarts the simulation.</p>
+  </section>
+  <section class="panel" aria-label="Calculation chain">
+    <h2>How coverage is calculated</h2>
+    <ol class="chain" id="chain">
+      <li data-k="1"><span class="t">Mean shot mass</span><span class="val" id="c1"></span><span class="f">m<sub>p</sub> = ρ · π E[D³] / 6, number-weighted mean over the size distribution (= ρ π D³/6 if σ = 0)</span></li>
+      <li data-k="2"><span class="t">Shots thrown per second</span><span class="val" id="c2"></span><span class="f">Ṅ = ṁ / m<sub>p</sub></span></li>
+      <li data-k="3"><span class="t">Impacts per mm² per pass</span><span class="val" id="c3"></span><span class="f">R = Ṅ / (V · ΔX): shots per second ÷ area swept per second. A point stays under the jet for ΔX / V = <span id="cDw"></span>.</span></li>
+      <li data-k="4"><span class="t">Area fraction impacted per pass</span><span class="val" id="c4"></span><span class="f">K = π E[r²] · R: total dent area per pass, overlaps counted twice. With r = c·D: K = 6 ṁ c² / (ρ D₃₂ V ΔX), D₃₂ = E[D³]/E[D²] = <span id="cD32"></span></span></li>
+      <li data-k="5"><span class="t">Coverage after n passes</span><span class="val" id="c5"></span><span class="f">Random impacts → a point stays unimpacted with probability e<sup>−Kn</sup>, hence τ = 100·(1 − e<sup>−Kn</sup>). 98 % is reached at n = ln 50 / K.</span></li>
+    </ol>
+  </section>
+</div>
+<footer>
+  <span><b>Dr Régis Kubler</b>, Arts et Métiers Institute of Technology. Developed with the assistance of Claude Opus 5.5 (Anthropic), October 2026.</span>
+  <span>Educational model with simplifying assumptions (uniform jet, random Poisson impacts, dent radius proportional to shot diameter). It does not replace coverage verification according to the applicable standards (e.g. SAE J2277). Code: MIT licence · Documentation: CC BY 4.0.</span>
+</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+const DEF = {mdot:1.5, rho:2.2, D:150, sig:0, dX:20, V:300, r:10, nmax:15};
+const SPEC = [
+  {k:"mdot", lab:"Media flow rate ṁ", unit:"kg/min", min:0.1, max:6, step:0.1, d:1},
+  {k:"rho",  lab:"Media density ρ", unit:"g/cm³", min:1, max:8, step:0.1, d:1},
+  {k:"D",    lab:"Mass median diameter D₅₀", unit:"µm", min:30, max:1000, step:10, d:0},
+  {k:"sig",  lab:"Size spread σ (log-normal)", unit:"", min:0, max:0.6, step:0.02, d:2},
+  {k:"dX",   lab:"Jet size ΔX", unit:"mm", min:5, max:60, step:1, d:0},
+  {k:"V",    lab:"Traverse speed V", unit:"mm/s", min:20, max:1500, step:10, d:0},
+  {k:"r",    lab:"Dent radius r (for D = D₅₀)", unit:"µm", min:2, max:100, step:1, d:0},
+  {k:"nmax", lab:"Number of passes simulated", unit:"", min:1, max:40, step:1, d:0}
+];
+const P = Object.assign({}, DEF);
+const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- formats ---------- */
+const nf = (x,d)=> x.toLocaleString("en-GB",{minimumFractionDigits:d,maximumFractionDigits:d});
+const sup = s => String(s).replace(/-/g,"−");
+function sci(x,d){ if(x===0) return "0"; const e=Math.floor(Math.log10(Math.abs(x))); const m=x/Math.pow(10,e);
+  if(e>=-2 && e<=4) return nf(x, e>=2?0:d); return nf(m,d)+" × 10<sup>"+sup(e)+"</sup>"; }
+
+/* ---------- model ---------- */
+let M; // derived quantities
+function derive(){
+  // Shot size: log-normal law (by number) with parameter σ; D₅₀ = mass median (sieving).
+  // Dent proportional to the shot: r = c·D, with c = r(D₅₀)/D₅₀.
+  const sg=P.sig, Dm=P.D*1e-6;
+  const Dn = Dm*Math.exp(-3*sg*sg);                              // number median (m)
+  const ED3 = Math.pow(Dm,3)*Math.exp(-4.5*sg*sg);               // number-weighted E[D³]
+  const ED2 = Math.pow(Dm,2)*Math.exp(-4*sg*sg);                 // number-weighted E[D²]
+  const D32 = ED3/ED2;                                           // Sauter mean diameter
+  const c = P.r/P.D;                                             // ratio r/D
+  const mp = P.rho*1000*Math.PI*ED3/6;                           // mean shot mass (kg)
+  const Nd = (P.mdot/60)/mp;                                     // shots/s
+  const R  = Nd/(P.V*P.dX);                                      // impacts/mm²/pass
+  const Er2 = c*c*ED2*1e6;                                       // E[r²] in mm²
+  const rmm = Math.sqrt(Er2);                                    // rms dent radius (mm)
+  const K  = Math.PI*Er2*R;
+  const rmax = c*Dn*Math.exp(3.2*sg)*1e3;                        // ~ largest dent (mm)
+  let L = 50*rmm; const cap = 2500;
+  if(R*Math.pow(L+2*rmax,2) > cap) L = Math.max(6*rmm, Math.sqrt(cap/R)-2*rmax);
+  const ext = L+2*rmax;                                          // sampling area (edge effects)
+  M = {mp,Nd,R,rmm,rmax,K,L,ext,c,Dn,D32,sg,Npass:R*ext*ext,inZone:R*L*L,dwell:P.dX/P.V};
+}
+function gauss(){ let u=0; while(u===0) u=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*Math.random()); }
+
+/* ---------- random ---------- */
+function poisson(mu){
+  if(mu<30){ const Lm=Math.exp(-mu); let k=0,p=1; do{k++;p*=Math.random();}while(p>Lm); return k-1; }
+  let u=0,v=0; while(u===0)u=Math.random(); v=Math.random();
+  return Math.max(0,Math.round(mu+Math.sqrt(mu)*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)));
+}
+
+/* ---------- colours ---------- */
+const STOPS=[[44,62,143],[38,130,142],[92,178,90],[232,206,58]];
+function passRGB(i){ const t = P.nmax<=1?0:i/(P.nmax-1); const x=Math.min(.9999,Math.max(0,t))*(STOPS.length-1);
+  const a=Math.floor(x), f=x-a, c0=STOPS[a], c1=STOPS[a+1];
+  return c0.map((c,j)=>Math.round(c+(c1[j]-c)*f)); }
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+/* ---------- jet path (units of ΔX; part = 3ΔX × 3ΔX square) ---------- */
+const SEG=[
+  {len:4, f:s=>({x:-0.5+s, y:0.5, line:0, dir:1})},
+  {len:1, f:s=>({x:3.5, y:0.5+s, line:0.5, dir:0})},
+  {len:4, f:s=>({x:3.5-s, y:1.5, line:1, dir:-1})},
+  {len:1, f:s=>({x:-0.5, y:1.5+s, line:1.5, dir:0})},
+  {len:4, f:s=>({x:-0.5+s, y:2.5, line:2, dir:1})}
+];
+const PATH = SEG.reduce((a,s)=>a+s.len,0); // 14
+function pos(s){ let acc=0; for(const g of SEG){ if(s<=acc+g.len) return g.f(s-acc); acc+=g.len; } return SEG[4].f(4); }
+function dwellFrac(p){ if(p.line<1) return 0; if(p.line>1) return 1; return Math.min(1,Math.max(0,2-p.x)); }
+function onZone(p){ return p.line===1 && p.x<=2 && p.x>=1; }
+
+/* ---------- state ---------- */
+const S = {n:0, s:0, playing:false, stopAtEnd:false, pass:[], idx:0, landed:[], rings:[], sim:[], meas:0, measDirty:false, frame:0};
+const MS = 500; // measurement grid resolution
+const grid = new Uint16Array(MS*MS); let covered=0, gmax=0;
+const over = document.createElement("canvas"); over.width=over.height=MS;
+const octx = over.getContext("2d");
+
+function newPass(){
+  const N = poisson(M.Npass), arr=new Array(N);
+  for(let i=0;i<N;i++) { const D=M.Dn*Math.exp(M.sg*gauss()); arr[i]={x:-M.rmax+Math.random()*M.ext, y:-M.rmax+Math.random()*M.ext, u:Math.random(), p:S.n, rr:M.c*D*1e3, D:D}; }
+  arr.sort((a,b)=>a.u-b.u); S.pass=arr; S.idx=0;
+}
+
+/* ---------- canvases ---------- */
+const zc=document.getElementById("zoom"), zx=zc.getContext("2d");
+const mc=document.getElementById("macro"), mx=mc.getContext("2d");
+const acc=document.createElement("canvas"), ax=acc.getContext("2d");
+const steel=document.createElement("canvas");
+let ZW=400, DPR=1;
+
+function buildSteel(w){
+  steel.width=steel.height=w; const c=steel.getContext("2d");
+  const img=c.createImageData(w,w), d=img.data;
+  for(let i=0;i<w*w;i++){ const n=182+(Math.random()*26-13)|0; const k=i*4; d[k]=n; d[k+1]=n+4; d[k+2]=n+10; d[k+3]=255; }
+  c.putImageData(img,0,0);
+  c.globalAlpha=.07; c.strokeStyle="#fff";
+  for(let i=0;i<w/3;i++){ const y=Math.random()*w; c.beginPath(); c.moveTo(0,y); c.lineTo(w,y+Math.random()*6-3); c.stroke(); }
+  c.globalAlpha=1;
+}
+function drawCrater(ctx,i,k){
+  const cx=i.x*k, cy=i.y*k, rr=i.rr*k, [r,g,b]=passRGB(i.p);
+  const gr=ctx.createRadialGradient(cx-rr*.25,cy-rr*.25,rr*.1,cx,cy,rr);
+  gr.addColorStop(0,`rgba(${Math.min(255,r+70)},${Math.min(255,g+70)},${Math.min(255,b+70)},.92)`);
+  gr.addColorStop(1,`rgba(${r},${g},${b},.92)`);
+  ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(cx,cy,rr,0,Math.PI*2); ctx.fill();
+  ctx.lineWidth=Math.max(.6,rr*.12); ctx.strokeStyle=`rgba(${r*.45|0},${g*.45|0},${b*.45|0},.9)`; ctx.stroke();
+}
+function bake(i){
+  drawCrater(ax,i,ZW*DPR/M.L);
+  const k=MS/M.L, cx=i.x*k-.5, cy=i.y*k-.5, rr=i.rr*k, r2=rr*rr;
+  const x0=Math.max(0,Math.ceil(cx-rr)), x1=Math.min(MS-1,Math.floor(cx+rr)), y0=Math.max(0,Math.ceil(cy-rr)), y1=Math.min(MS-1,Math.floor(cy+rr));
+  for(let y=y0;y<=y1;y++){ const dy=y-cy, row=y*MS; for(let x=x0;x<=x1;x++){ const dx=x-cx; if(dx*dx+dy*dy<=r2){ const v=++grid[row+x]; if(v===1) covered++; if(v>gmax) gmax=v; } } }
+  S.measDirty=true;
+}
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  const w=Math.round(zc.getBoundingClientRect().width)||400; ZW=w;
+  zc.width=acc.width=w*DPR; zc.height=acc.height=w*DPR;
+  buildSteel(Math.min(900,w*DPR));
+  ax.clearRect(0,0,acc.width,acc.height);
+  const k=ZW*DPR/M.L; for(const i of S.landed) drawCrater(ax,i,k);
+  const mw=Math.round(mc.getBoundingClientRect().width)||500;
+  mc.width=mw*DPR; mc.height=Math.round(mw*3.7/5.2)*DPR;
+}
+
+/* ---------- measurement ---------- */
+function measure(){
+  S.meas=100*covered/(MS*MS);
+  if(heatLive()) drawHeat(grid, S.n + (S.n<P.nmax && S.s>0 ? 1:0));
+  if(document.getElementById("bare").checked){
+    const img=octx.createImageData(MS,MS), d=img.data;
+    const hex=css("--bare").replace("#",""), R=parseInt(hex.slice(0,2),16), G=parseInt(hex.slice(2,4),16), B=parseInt(hex.slice(4,6),16);
+    for(let i=0;i<grid.length;i++) if(!grid[i]){ const k=i*4; d[k]=R; d[k+1]=G; d[k+2]=B; d[k+3]=255; }
+    octx.putImageData(img,0,0);
+  }
+  S.measDirty=false;
+}
+
+/* ---------- impact count map ---------- */
+const hc=document.getElementById("heat"), hx=hc.getContext("2d");
+hc.width=hc.height=MS;
+const himg=hx.createImageData(MS,MS);
+const HSTOPS=[[234,242,248],[150,196,228],[58,130,192],[24,72,140],[10,28,70]];
+let TOP=8, PAL=[];
+function hexRGB(h){ h=h.replace("#",""); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+function buildPal(){
+  TOP=25;
+  PAL=[hexRGB(css("--bare")||"#e5484d")];
+  for(let k=1;k<=TOP;k++){ const t=Math.sqrt((k-1)/Math.max(1,TOP-1))*(HSTOPS.length-1), a=Math.min(HSTOPS.length-2,Math.floor(t)), f=t-a;
+    PAL.push(HSTOPS[a].map((c,j)=>Math.round(c+(HSTOPS[a+1][j]-c)*f))); }
+  const sc=document.getElementById("scale"); sc.innerHTML="Impacts per point:";
+  for(let k=0;k<=TOP;k++){ const sp=document.createElement("span"); sp.className="c";
+    sp.innerHTML=`<i style="background:rgb(${PAL[k].join(",")})"></i>${k===TOP?"≥"+k:k}`; sc.appendChild(sp); }
+}
+let shown=grid, shownN=0;
+function heatLive(){ const sl=document.getElementById("mapN"); return !(S.n>=P.nmax && +sl.value<S.n) ; }
+function drawHeat(g,nLabel){
+  shown=g; shownN=nLabel;
+  const d=himg.data, hist=new Float64Array(TOP+1); let sum=0, mx=0;
+  for(let i=0;i<g.length;i++){ const v=g[i], c=PAL[Math.min(v,TOP)], k=i*4; d[k]=c[0]; d[k+1]=c[1]; d[k+2]=c[2]; d[k+3]=255;
+    hist[Math.min(v,TOP)]++; sum+=v; if(v>mx) mx=v; }
+  hx.putImageData(himg,0,0);
+  const N=g.length; for(let k=0;k<=TOP;k++) hist[k]/=N;
+  drawHist(hist, sum/N, mx, nLabel);
+  const sl=document.getElementById("mapN"); sl.max=S.n; if(heatLive()) sl.value=Math.min(S.n,nLabel);
+  document.getElementById("mapNo").textContent=nLabel+(nLabel===1?" pass":" passes");
+}
+function drawHist(h,mean,mx,n){
+  const svg=document.getElementById("hist"); svg.innerHTML="";
+  const L=46,R=12,T=14,B=40,W=560,H=300, nb=TOP+1, bw=(W-L-R)/nb;
+  const lam=M.K*n, pois=[]; let acc=0;
+  for(let k=0;k<TOP;k++){ const p=Math.exp(-lam+k*Math.log(lam||1e-300)-lgam(k+1)); pois.push(lam===0?(k===0?1:0):p); acc+=pois[k]; }
+  pois.push(Math.max(0,1-acc));
+  const ymax=Math.max(.05,Math.min(1,Math.ceil(Math.max(...h,...pois)*10+0.5)/10));
+  const y=v=>T+(H-T-B)*(1-v/ymax);
+  for(let i=0;i<=5;i++){ const v=ymax*i/5; el("line",{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:css("--line")},svg);
+    const t=el("text",{x:L-6,y:y(v)+4,"text-anchor":"end"},svg); t.textContent=nf(100*v,0)+" %"; }
+  for(let k=0;k<nb;k++){ const x0=L+k*bw;
+    el("rect",{x:x0+bw*.14,y:y(h[k]),width:bw*.72,height:Math.max(0,y(0)-y(h[k])),fill:k===0?css("--bare"):css("--accent"),rx:2},svg);
+    if(nb<=17 || k%2===0 || k===TOP){ const t=el("text",{x:x0+bw/2,y:H-B+16,"text-anchor":"middle"},svg); t.textContent=k===TOP?"≥"+k:k; } }
+  let d=""; pois.forEach((p,k)=>{ d+=(k?"L":"M")+(L+k*bw+bw/2).toFixed(1)+","+y(p).toFixed(1); });
+  el("path",{d,fill:"none",stroke:css("--theory"),"stroke-width":1.5,"stroke-dasharray":"4 3"},svg);
+  pois.forEach((p,k)=>el("circle",{cx:L+k*bw+bw/2,cy:y(p),r:3,fill:css("--theory"),stroke:css("--surface"),"stroke-width":1.5},svg));
+  const t=el("text",{x:(L+W-R)/2,y:H-6,"text-anchor":"middle"},svg); t.textContent="k = number of impacts received by a point (after "+n+(n===1?" pass)":" passes)");
+  document.getElementById("hMean").textContent=nf(mean,2);
+  document.getElementById("hLam").textContent=nf(lam,2);
+  document.getElementById("hMax").textContent=mx+" impacts";
+  document.getElementById("hZero").textContent=nf(100*h[0],1)+" %";
+}
+function lgam(n){ let s=0; for(let i=2;i<n;i++) s+=Math.log(i); return s; } // ln((n-1)!)
+function gridAfter(n){
+  const g=new Uint16Array(MS*MS), k=MS/M.L;
+  for(const i of S.landed){ if(i.p>=n) continue; const cx=i.x*k-.5, cy=i.y*k-.5, rr=i.rr*k, r2=rr*rr;
+    const x0=Math.max(0,Math.ceil(cx-rr)), x1=Math.min(MS-1,Math.floor(cx+rr)), y0=Math.max(0,Math.ceil(cy-rr)), y1=Math.min(MS-1,Math.floor(cy+rr));
+    for(let y=y0;y<=y1;y++){ const dy=y-cy,row=y*MS; for(let x=x0;x<=x1;x++){ const dx=x-cx; if(dx*dx+dy*dy<=r2) g[row+x]++; } } }
+  return g;
+}
+document.getElementById("mapN").addEventListener("input",e=>{ const n=+e.target.value; if(n>=S.n) drawHeat(grid,S.n); else drawHeat(gridAfter(n),n); });
+hc.addEventListener("mousemove",e=>{ const b=hc.getBoundingClientRect(); const x=Math.floor((e.clientX-b.left)/b.width*MS), y=Math.floor((e.clientY-b.top)/b.height*MS);
+  if(x<0||y<0||x>=MS||y>=MS) return; const v=shown[y*MS+x];
+  document.getElementById("hover").textContent=`Point (${nf(x/MS*M.L*1000,0)} µm, ${nf(y/MS*M.L*1000,0)} µm): hit ${v} time${v===1?"":"s"}`+(v===0?" (never hit)":""); });
+hc.addEventListener("mouseleave",()=>{ document.getElementById("hover").textContent="Hover over the map to read the number of impacts at a point."; });
+
+/* ---------- drawing: zoomed view ---------- */
+function drawZoom(now,p){
+  const W=zc.width; zx.setTransform(1,0,0,1,0,0);
+  zx.drawImage(steel,0,0,W,W); zx.drawImage(acc,0,0);
+  if(document.getElementById("bare").checked){ zx.globalAlpha=.6; zx.drawImage(over,0,0,W,W); zx.globalAlpha=1; }
+  const k=W/M.L;
+  S.rings=S.rings.filter(g=>now-g.t<350);
+  if(!reduce) for(const g of S.rings){ const a=(now-g.t)/350; zx.strokeStyle=`rgba(255,255,255,${.9*(1-a)})`; zx.lineWidth=1.5*DPR;
+    zx.beginPath(); zx.arc(g.x*k,g.y*k,g.rr*k*(1+a*.8),0,Math.PI*2); zx.stroke(); }
+  if(onZone(p) && S.playing){ zx.fillStyle="rgba(240,138,75,.10)"; zx.fillRect(0,0,W,W);
+    zx.font=`600 ${12*DPR}px Archivo, sans-serif`; zx.fillStyle="rgba(120,45,0,.85)"; zx.textAlign="right";
+    zx.fillText("jet over the area ←", W-10*DPR, 20*DPR); }
+  // scale bar
+  const target=M.L/4, pw=Math.pow(10,Math.floor(Math.log10(target*1000))); let len=pw; for(const m of [1,2,5]) if(m*pw<=target*1000) len=m*pw;
+  const bl=len/1000*k, x0=12*DPR, y0=W-14*DPR;
+  zx.fillStyle="rgba(15,20,25,.72)"; zx.fillRect(x0-6*DPR,y0-22*DPR,bl+12*DPR,30*DPR);
+  zx.fillStyle="#fff"; zx.fillRect(x0,y0,bl,3*DPR);
+  zx.font=`500 ${11*DPR}px "IBM Plex Mono", monospace`; zx.textAlign="left"; zx.fillText(nf(len,0)+" µm",x0,y0-7*DPR);
+}
+
+/* ---------- drawing: swept part ---------- */
+function drawMacro(p){
+  const W=mc.width,H=mc.height, sc=W/5.2, ox=1.1*sc, oy=.35*sc;
+  const X=x=>ox+x*sc, Y=y=>oy+y*sc;
+  mx.setTransform(1,0,0,1,0,0); mx.clearRect(0,0,W,H);
+  // part
+  mx.fillStyle="#b9bfc6"; mx.fillRect(X(0),Y(0),3*sc,3*sc);
+  // areas already swept during the current pass
+  mx.fillStyle="rgba(31,90,150,.16)";
+  const lines=[0,1,2];
+  for(const l of lines){ if(p.line>l){ mx.fillRect(X(0),Y(l),3*sc,sc); }
+    else if(p.line===l){ const cl=v=>Math.max(0,Math.min(3,v));
+      const xa = l===1? cl(p.x-.5) : 0, xb = l===1 ? 3 : cl(p.x+.5);
+      if(xb>xa) mx.fillRect(X(xa),Y(l),(xb-xa)*sc,sc); } }
+  mx.strokeStyle="rgba(23,32,42,.55)"; mx.lineWidth=1*DPR; mx.strokeRect(X(0),Y(0),3*sc,3*sc);
+  // path
+  mx.setLineDash([4*DPR,4*DPR]); mx.strokeStyle=css("--muted"); mx.beginPath();
+  mx.moveTo(X(-.5),Y(.5)); mx.lineTo(X(3.5),Y(.5)); mx.lineTo(X(3.5),Y(1.5)); mx.lineTo(X(-.5),Y(1.5)); mx.lineTo(X(-.5),Y(2.5)); mx.lineTo(X(3.5),Y(2.5));
+  mx.stroke(); mx.setLineDash([]);
+  // observed area
+  const zs=Math.max(7*DPR, M.L/P.dX*sc);
+  mx.strokeStyle=css("--bare"); mx.lineWidth=2*DPR; mx.strokeRect(X(1.5)-zs/2,Y(1.5)-zs/2,zs,zs);
+  mx.font=`600 ${11*DPR}px Archivo, sans-serif`; mx.fillStyle="#1b2430"; mx.textAlign="center";
+  mx.fillText("observed area",X(1.5),Y(1.5)+zs/2+13*DPR);
+  // jet
+  mx.fillStyle="rgba(240,138,75,.42)"; mx.strokeStyle=css("--accent"); mx.lineWidth=2*DPR;
+  mx.fillRect(X(p.x-.5),Y(p.y-.5),sc,sc); mx.strokeRect(X(p.x-.5),Y(p.y-.5),sc,sc);
+  if(S.playing && !reduce){ mx.fillStyle="rgba(130,50,0,.75)"; for(let i=0;i<45;i++){ mx.beginPath(); mx.arc(X(p.x-.5+Math.random()),Y(p.y-.5+Math.random()),1.2*DPR,0,7); mx.fill(); } }
+  // dimensions
+  mx.fillStyle=css("--ink"); mx.font=`500 ${11*DPR}px "IBM Plex Mono", monospace`; mx.textAlign="center";
+  mx.fillText("ΔX = "+nf(P.dX,0)+" mm", X(p.x), Y(p.y-.5)-6*DPR);
+  if(p.dir!==0){ const ax0=X(p.x-p.dir*.3), ax1=X(p.x+p.dir*.38), ay=Y(p.y);
+    mx.strokeStyle=css("--accent"); mx.lineWidth=2.5*DPR; mx.beginPath(); mx.moveTo(ax0,ay); mx.lineTo(ax1,ay); mx.stroke();
+    mx.beginPath(); mx.moveTo(ax1,ay); mx.lineTo(ax1-p.dir*8*DPR,ay-5*DPR); mx.lineTo(ax1-p.dir*8*DPR,ay+5*DPR); mx.closePath(); mx.fillStyle=css("--accent"); mx.fill();
+    mx.fillText("V = "+nf(P.V,0)+" mm/s", X(p.x), Y(p.y+.5)+14*DPR); }
+  mx.textAlign="left"; mx.fillStyle=css("--muted");
+  mx.fillText("part "+nf(3*P.dX,0)+" × "+nf(3*P.dX,0)+" mm, 3 lines at pitch ΔX", X(0), Y(3)+15*DPR);
+}
+
+/* ---------- curve ---------- */
+const SVGNS="http://www.w3.org/2000/svg";
+function el(n,a,parent){ const e=document.createElementNS(SVGNS,n); for(const k in a) e.setAttribute(k,a[k]); parent.appendChild(e); return e; }
+function drawChart(){
+  const svg=document.getElementById("chart"); svg.innerHTML="";
+  const L=44,R=14,T=12,B=34,W=560,H=290, nx=Math.max(P.nmax,4);
+  const x=n=>L+(W-L-R)*n/nx, y=v=>T+(H-T-B)*(1-v/100);
+  const grid=css("--line"), mut=css("--muted");
+  for(let v=0;v<=100;v+=20){ el("line",{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:grid,"stroke-width":1},svg); const t=el("text",{x:L-6,y:y(v)+4,"text-anchor":"end"},svg); t.textContent=v+" %"; }
+  const stepX = nx<=10?1:nx<=20?2:5;
+  for(let n=0;n<=nx;n+=stepX){ const t=el("text",{x:x(n),y:H-B+16,"text-anchor":"middle"},svg); t.textContent=n; }
+  const tl=el("text",{x:(L+W-R)/2,y:H-4,"text-anchor":"middle"},svg); tl.textContent="number of passes n";
+  el("line",{x1:L,x2:W-R,y1:y(98),y2:y(98),stroke:css("--bare"),"stroke-dasharray":"3 4","stroke-width":1},svg);
+  const t98=el("text",{x:W-R-2,y:y(98)+14,"text-anchor":"end"},svg); t98.textContent="98 %";
+  // no overlap
+  const nLin=Math.min(nx,1/M.K);
+  el("line",{x1:x(0),y1:y(0),x2:x(nLin),y2:y(100*M.K*nLin),stroke:mut,"stroke-width":1.5,"stroke-dasharray":"6 4"},svg);
+  // model
+  let d=""; for(let i=0;i<=200;i++){ const n=nx*i/200; d+=(i?"L":"M")+x(n).toFixed(1)+","+y(100*(1-Math.exp(-M.K*n))).toFixed(1); }
+  el("path",{d,fill:"none",stroke:css("--theory"),"stroke-width":2.5},svg);
+  // n98
+  const n98=Math.log(50)/M.K; if(n98<=nx){ el("line",{x1:x(n98),x2:x(n98),y1:y(0),y2:y(98),stroke:css("--bare"),"stroke-dasharray":"3 4"},svg);
+    const t=el("text",{x:x(n98)+5,y:y(8),"text-anchor":"start"},svg); t.textContent="n₉₈ ≈ "+nf(n98,1); }
+  // simulation
+  for(const p of S.sim){ el("circle",{cx:x(p.n),cy:y(p.t),r:4.5,fill:css("--accent"),stroke:css("--surface"),"stroke-width":1.5},svg); }
+}
+
+/* ---------- size distribution ---------- */
+function drawSizes(){
+  const svg=document.getElementById("sizes"); svg.innerHTML="";
+  const L=20,R=14,T=12,B=34,W=560,H=210, sg=M.sg, Dm=P.D;
+  const note=document.getElementById("sizeNote");
+  const lo = sg<0.02? Dm*0.5 : Dm*Math.exp(-3*sg*sg-3.2*sg), hi = sg<0.02? Dm*1.5 : Dm*Math.exp(3.2*sg);
+  const x=d=>L+(W-L-R)*(d-lo)/(hi-lo), ybase=H-B;
+  el("line",{x1:L,x2:W-R,y1:ybase,y2:ybase,stroke:css("--line")},svg);
+  const nt=5; for(let i=0;i<=nt;i++){ const d=lo+(hi-lo)*i/nt; const t=el("text",{x:x(d),y:ybase+16,"text-anchor":"middle"},svg); t.textContent=nf(d,0); }
+  const tl=el("text",{x:(L+W-R)/2,y:H-3,"text-anchor":"middle"},svg); tl.textContent="diameter D (µm)";
+  const mark=(d,lab,col,row)=>{ el("line",{x1:x(d),x2:x(d),y1:T+row*14,y2:ybase,stroke:col,"stroke-dasharray":"3 3"},svg);
+    const t=el("text",{x:x(d)+4,y:T+10+row*14,"text-anchor":"start"},svg); t.textContent=lab; t.setAttribute("style","fill:"+col); };
+  if(sg<0.02){
+    el("rect",{x:x(Dm)-3,y:T+30,width:6,height:ybase-T-30,fill:css("--theory")},svg);
+    mark(Dm,"D = "+nf(Dm,0)+" µm",css("--ink"),0);
+    note.innerHTML="σ = 0: all shots have the same diameter, which gives exactly the reference Excel model. Increase σ to introduce a log-normal distribution (σ ≈ 0.1–0.2 for well-graded media, 0.3–0.5 for wide or worn media).";
+    return;
+  }
+  const mu=Math.log(Dm)-3*sg*sg, pdf=(d,m)=>Math.exp(-Math.pow(Math.log(d)-m,2)/(2*sg*sg))/(d*sg*Math.sqrt(2*Math.PI));
+  const N=160, pn=[], pm=[]; let mxv=0;
+  for(let i=0;i<=N;i++){ const d=lo+(hi-lo)*i/N; const a=pdf(d,mu), b=pdf(d,mu+3*sg*sg); pn.push([d,a]); pm.push([d,b]); mxv=Math.max(mxv,a,b); }
+  const y=v=>ybase-(ybase-T-30)*v/mxv;
+  const path=(arr,col)=>{ let dd=""; arr.forEach(([d,v],i)=>{ dd+=(i?"L":"M")+x(d).toFixed(1)+","+y(v).toFixed(1); });
+    el("path",{d:dd+"L"+x(hi)+","+ybase+"L"+x(lo)+","+ybase+"Z",fill:col,"fill-opacity":.15,stroke:"none"},svg);
+    el("path",{d:dd,fill:"none",stroke:col,"stroke-width":2},svg); };
+  path(pn,css("--theory")); path(pm,css("--accent"));
+  mark(Dm,"D₅₀ mass = "+nf(Dm,0),css("--accent"),0);
+  mark(M.D32*1e6,"D₃₂ = "+nf(M.D32*1e6,0),css("--ink"),1);
+  mark(M.Dn*1e6,"D₅₀ number = "+nf(M.Dn*1e6,0),css("--theory"),2);
+  const Kmono=6*(P.mdot/60)*Math.pow(M.c,2)/(P.rho*1000*P.D*1e-6*(P.V*1e-3)*(P.dX*1e-3));
+  note.innerHTML=`Log-normal law, σ = ${nf(sg,2)}. Dent radii range from about ${nf(P.r*Math.exp(-3*sg*sg-2*sg),1)} to ${nf(P.r*Math.exp(-3*sg*sg+2*sg),1)} µm (95 % of shots). K = ${nf(M.K,3)} versus ${nf(Kmono,3)} if all shots had diameter D₅₀: the single-size model still holds with D = D₃₂ = ${nf(M.D32*1e6,0)} µm and r = c·D₃₂ = ${nf(M.c*M.D32*1e6,1)} µm.`;
+}
+
+/* ---------- texts ---------- */
+function setChain(active){ for(const li of document.querySelectorAll("#chain li")) li.classList.toggle("on", li.dataset.k==active); }
+function fillChain(){
+  document.getElementById("c1").innerHTML=sci(M.mp*1e6,2)+" mg";
+  document.getElementById("c2").innerHTML=sci(M.Nd,2)+" /s";
+  document.getElementById("c3").innerHTML=nf(M.R,0)+" /mm²";
+  document.getElementById("c4").innerHTML="K = "+nf(M.K,3);
+  document.getElementById("c5").innerHTML="n₉₈ ≈ "+nf(Math.log(50)/M.K,1);
+  document.getElementById("cDw").textContent=nf(M.dwell*1000,0)+" ms";
+  document.getElementById("cD32").textContent=nf(M.D32*1e6,0)+" µm";
+  drawSizes();
+  document.getElementById("zoneNote").innerHTML="Square of side "+nf(M.L*1000,0)+" µm at the centre of the part. At each pass about <b>"+nf(M.inZone,0)+"</b> shots hit it (R × L²). Coverage is measured by counting the points that have been hit.";
+  const g=[0,.33,.66,1].map(t=>"rgb("+passRGB(t*(P.nmax-1)).join(",")+")");
+  document.getElementById("ramp").style.background="linear-gradient(90deg,"+g.join(",")+")";
+  document.getElementById("rampLbl").textContent="1 → "+P.nmax;
+}
+let lastPhase="";
+function updatePhase(p){
+  let h;
+  if(S.n>=P.nmax && !S.playing) h=`Simulation complete: <b>${nf(S.meas,1)} %</b> measured after ${S.n} passes, versus ${nf(100*(1-Math.exp(-M.K*S.n)),1)} % predicted by the model.`;
+  else if(!S.playing && S.n===0 && S.s===0) h="Press <b>Play</b>: the jet will sweep the part line by line. The observed area is on the middle line.";
+  else if(p.line<1) h=`Pass ${S.n+1}: the jet is sweeping the first line and has not reached the observed area yet.`;
+  else if(p.line===1 && p.x>2) h=`Pass ${S.n+1}: the jet is entering the line of the observed area.`;
+  else if(onZone(p)) h=`Pass ${S.n+1}: <b>the jet is over the area</b>. Each point stays under it for ΔX/V = ${nf(M.dwell*1000,0)} ms and receives on average R = ${nf(M.R,0)} impacts/mm².`;
+  else h=`Pass ${S.n+1}: the jet has left the area. Current coverage: <b>${nf(S.meas,1)} %</b>.`;
+  if(h!==lastPhase){ document.getElementById("phase").innerHTML=h; lastPhase=h; }
+  setChain(onZone(p)?3:(p.line>1||S.n>0?5:2));
+}
+function updateReads(){
+  let sa=0; for(const i of S.landed) sa+=i.rr*i.rr; const lam=Math.PI*sa/(M.ext*M.ext);
+  document.getElementById("rN").textContent=S.n;
+  document.getElementById("rDens").textContent=nf(S.landed.length/(M.ext*M.ext),0);
+  document.getElementById("rLam").textContent=nf(lam,3);
+  document.getElementById("rMeas").textContent=nf(S.meas,1)+" %";
+  document.getElementById("rTh").textContent=nf(100*(1-Math.exp(-lam)),1)+" %";
+}
+
+/* ---------- loop ---------- */
+function land(i,now){ S.landed.push(i); bake(i); if(S.rings.length<400) S.rings.push({x:i.x,y:i.y,rr:i.rr,t:now}); }
+function finishPass(now){
+  while(S.idx<S.pass.length) land(S.pass[S.idx++],now);
+  S.n++; measure(); S.sim.push({n:S.n,t:S.meas}); drawChart(); drawHeat(grid,S.n);
+  if(S.n>=P.nmax){ S.playing=false; S.s=PATH; setPlayLabel(); return; }
+  S.s=0; newPass();
+  if(S.stopAtEnd){ S.playing=false; S.stopAtEnd=false; setPlayLabel(); }
+}
+let last=performance.now();
+function tick(now){
+  const dt=Math.min(.05,(now-last)/1000); last=now;
+  if(S.playing){
+    const mult=+document.getElementById("speed").value, ff=document.getElementById("ff").checked;
+    const p0=pos(S.s), slow=p0.line===1 && p0.x>.85 && p0.x<2.15;
+    S.s += dt*mult*(slow||!ff ? 1/1.6 : 6);
+    if(S.s>=PATH) finishPass(now);
+    else { const f=dwellFrac(pos(S.s)); while(S.idx<S.pass.length && S.pass[S.idx].u<=f) land(S.pass[S.idx++],now); }
+  }
+  if(S.measDirty && (++S.frame%5===0)) measure();
+  const p=pos(Math.min(S.s,PATH));
+  drawZoom(now,p); drawMacro(p); updatePhase(p); updateReads();
+  requestAnimationFrame(tick);
+}
+
+/* ---------- controls ---------- */
+const playBtn=document.getElementById("play");
+function setPlayLabel(){ playBtn.textContent=S.playing?"❚❚ Pause":(S.n>=P.nmax?"↻ Replay":"▶ Play"); }
+function reset(){
+  derive(); S.n=0; S.s=0; S.landed=[]; S.rings=[]; S.sim=[]; S.meas=0; S.stopAtEnd=false;
+  grid.fill(0); covered=0; gmax=0; octx.clearRect(0,0,MS,MS);
+  newPass(); resize(); buildPal(); document.getElementById("mapN").max=0; document.getElementById("mapN").value=0; measure(); drawHeat(grid,0); fillChain(); drawChart(); lastPhase=""; 
+}
+playBtn.onclick=()=>{ if(S.n>=P.nmax){ reset(); } S.playing=!S.playing; S.stopAtEnd=false; setPlayLabel(); };
+document.getElementById("step").onclick=()=>{ if(S.n>=P.nmax) reset(); S.playing=true; S.stopAtEnd=true; setPlayLabel(); };
+document.getElementById("all").onclick=()=>{ const now=performance.now(); S.stopAtEnd=false;
+  if(S.n>=P.nmax) reset(); S.playing=false; while(S.n<P.nmax) finishPass(now); S.playing=false; setPlayLabel(); };
+document.getElementById("reset").onclick=()=>{ const was=S.playing; reset(); S.playing=was; setPlayLabel(); };
+document.getElementById("bare").onchange=()=>measure();
+document.getElementById("defaults").onclick=()=>{ Object.assign(P,DEF); for(const s of SPEC) syncInput(s); reset(); S.playing=false; setPlayLabel(); };
+
+/* ---------- parameters ---------- */
+const box=document.getElementById("params");
+function syncInput(s){ document.getElementById("in-"+s.k).value=P[s.k]; document.getElementById("out-"+s.k).textContent=nf(P[s.k],s.d)+(s.unit?" "+s.unit:""); }
+for(const s of SPEC){
+  const d=document.createElement("div"); d.className="param";
+  d.innerHTML=`<label for="in-${s.k}"><span>${s.lab}</span><output id="out-${s.k}"></output></label><input type="range" id="in-${s.k}" min="${s.min}" max="${s.max}" step="${s.step}">`;
+  box.appendChild(d);
+  const inp=d.querySelector("input"); inp.value=P[s.k];
+  inp.addEventListener("input",()=>{ P[s.k]=+inp.value; syncInput(s); const was=S.playing; reset(); S.playing=was; setPlayLabel(); });
+  syncInput(s);
+}
+
+let rT; window.addEventListener("resize",()=>{ clearTimeout(rT); rT=setTimeout(()=>{ resize(); },120); });
+if(window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()=>{ drawChart(); measure(); });
+
+reset();
+S.playing=!reduce; setPlayLabel();
+requestAnimationFrame(t=>{ last=t; tick(t); });
+})();
+</script>
+
+</body>
+</html>
