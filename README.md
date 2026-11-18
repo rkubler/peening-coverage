@@ -26,9 +26,13 @@ with K = 6·ṁ·c² / (ρ·D₃₂·V·ΔX), where c = r/D and D₃₂ = E[D³]
 
 ## Coverage above 100 % (NF L 06-832)
 
-The base time is the peening time needed to dent 98 % of the surface. Full coverage (100 %) is 1.25 × the base time (an option sets it to the base time instead), and 200 % or 300 % means 2 or 3 times the time of full coverage. On an even random treatment, full coverage corresponds to λ = 1.25·ln 50 = 4.89 impacts per point on average (99.25 % dented); the local coverage level of a point is 100·λ/4.89.
+The base time is the peening time needed to dent 98 % of the surface. Full coverage (100 %) is 1.25 × the base time (an option sets it to the base time instead), and 200 % or 300 % means 2 or 3 times the time of full coverage. On an even random treatment, full coverage corresponds to λ = 1.25·ln 50 = 4.89 impacts per point on average (99.25 % dented). Coverage itself is always the dented area divided by the total area. The readout "Coverage (NF L 06-832)" combines both: it is the dented area up to the base time t_b (98 %), goes from 98 % to 100 % between t_b and 1.25·t_b, and is 100·t / (1.25·t_b) above (200 % = twice the time of full coverage).
 
-Version 1.3 (18 November 2026): coverage level reached, passes for a specified coverage, option for the 1.25 factor.
+Version 1.5 (18 November 2026): new readout "Coverage (NF L 06-832)", which can exceed 100 %; passes for C computed with the same definition.
+
+Version 1.4 (18 November 2026): the "coverage level reached" readout is removed; coverage is the dented area divided by the total area.
+
+Version 1.3 (18 November 2026): passes for a specified coverage, option for the 1.25 factor.
 
 ## Documentation
 - [Coverage model note (PDF)](coverage_model_note.pdf): the original spreadsheet model, step by step

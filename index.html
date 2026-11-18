@@ -97,7 +97,7 @@ ol.chain li.on::before{color:var(--accent)}
 <div class="wrap">
 <header class="hero">
 <div class="htext">
-  <p class="byline"><b>Dr Régis Kubler</b>, Arts et Métiers Institute of Technology · Developed with the assistance of Claude Opus 5.5 (Anthropic), October 2026 · <b>Version 1.3 (18 November 2026)</b></p>
+  <p class="byline"><b>Dr Régis Kubler</b>, Arts et Métiers Institute of Technology · Developed with the assistance of Claude Opus 5.5 (Anthropic), October 2026 · <b>Version 1.5 (18 November 2026)</b></p>
   <h1>Shot Peening Coverage Simulator</h1>
   <p>The jet sweeps the part at traverse speed V. Each shot leaves a circular dent of radius r. The surface actually covered is measured and compared with the model <span class="formula">τ(n) = 100·(1 − e<sup>−K·n</sup>)</span>.</p>
 </div>
@@ -132,7 +132,7 @@ ol.chain li.on::before{color:var(--accent)}
       <div class="read"><div class="k">λ = Σ dent areas / surface</div><div class="v" id="rLam">0</div></div>
       <div class="read hl"><div class="k">Measured coverage (pixel count)</div><div class="v" id="rMeas">0 %</div></div>
       <div class="read th"><div class="k">Predicted coverage 100·(1 − e<sup>−λ</sup>)</div><div class="v" id="rTh">0 %</div></div>
-      <div class="read hl"><div class="k">Coverage level reached (NF L 06-832)</div><div class="v" id="rLev">0 %</div></div>
+      <div class="read hl"><div class="k">Coverage (NF L 06-832), can exceed 100 %</div><div class="v" id="rNF">0 %</div></div>
       <div class="read th"><div class="k" id="kSpecN">Passes for C = 100 %</div><div class="v" id="rSpecN">–</div></div>
     </div>
   </section>
@@ -203,7 +203,7 @@ ol.chain li.on::before{color:var(--accent)}
       <li data-k="3"><span class="t">Impacts per mm² per pass</span><span class="val" id="c3"></span><span class="f">R = Ṅ / (V · ΔX): shots per second ÷ area swept per second. A point stays under the jet for ΔX / V = <span id="cDw"></span>.</span></li>
       <li data-k="4"><span class="t">Area fraction impacted per pass</span><span class="val" id="c4"></span><span class="f">K = π E[r²] · R: total dent area per pass, overlaps counted twice. With r = c·D: K = 6 ṁ c² / (ρ D₃₂ V ΔX), D₃₂ = E[D³]/E[D²] = <span id="cD32"></span></span></li>
       <li data-k="5"><span class="t">Coverage after n passes</span><span class="val" id="c5"></span><span class="f">Random impacts → a point stays unimpacted with probability e<sup>−Kn</sup>, hence τ = 100·(1 − e<sup>−Kn</sup>). 98 % is reached at n = ln 50 / K.</span></li>
-      <li data-k="6"><span class="t">Coverage above 100 % (NF L 06-832)</span><span class="val" id="c6"></span><span class="f">The time to reach 98 % is the base time. Full coverage, 100 %, is 1.25 × the base time (an option sets it to the base time instead): n₁₀₀ = 1.25·ln 50 / K, when each point has received λ = 4.89 impacts on average and 99.25 % of the surface is dented. A coverage C means C/100 times that time (200 % = twice the time of full coverage); the coverage level reached is 100·λ / (1.25·ln 50).</span></li>
+      <li data-k="6"><span class="t">Coverage above 100 % (NF L 06-832)</span><span class="val" id="c6"></span><span class="f">The time to reach 98 % is the base time. Full coverage, 100 %, is 1.25 × the base time (an option sets it to the base time instead): n₁₀₀ = 1.25·ln 50 / K, when each point has received λ = 4.89 impacts on average and 99.25 % of the surface is dented. A coverage C above 100 % means C/100 times that time (200 % = twice the time of full coverage). The readout “Coverage (NF L 06-832)” is therefore the dented area up to the base time t<sub>b</sub> (98 %), goes from 98 % to 100 % between t<sub>b</sub> and 1.25·t<sub>b</sub>, and is 100·t / (1.25·t<sub>b</sub>) above.</span></li>
     </ol>
   </section>
 </div>
@@ -220,6 +220,9 @@ ol.chain li.on::before{color:var(--accent)}
 const DEF = {mdot:1.5, rho:2.2, D:150, sig:0, dX:20, V:300, r:10, nmax:15};
 /* coverage above 100 % (NF L 06-832): full coverage = FF × base time (98 %) */
 const FF=()=>document.getElementById("in-ffac").value==="125"?1.25:1, L100=()=>FF()*Math.log(50);
+// NF L 06-832 coverage: dented area up to the base time t_b (98 %), 98 -> 100 % between t_b and FF*t_b, then 100*t/(FF*t_b)
+function nfCov(x,area){ const F=FF(); if(x<=1) return area; if(F>1&&x<=F) return 98+2*(x-1)/(F-1); return 100*x/F; }
+function nForC(C){ const n98=Math.log(50)/M.K, F=FF(); if(C<=98) return -Math.log(1-C/100)/M.K; if(C<=100) return F>1?n98*(1+(F-1)*(C-98)/2):n98; return C/100*F*n98; }
 const SPEC = [
   {k:"mdot", lab:"Media flow rate ṁ", unit:"kg/min", min:0.1, max:6, step:0.1, d:1},
   {k:"rho",  lab:"Media density ρ", unit:"g/cm³", min:1, max:8, step:0.1, d:1},
@@ -488,7 +491,7 @@ const SVGNS="http://www.w3.org/2000/svg";
 function el(n,a,parent){ const e=document.createElementNS(SVGNS,n); for(const k in a) e.setAttribute(k,a[k]); parent.appendChild(e); return e; }
 function drawChart(){
   const svg=document.getElementById("chart"); svg.innerHTML="";
-  const L=44,R=14,T=12,B=34,W=560,H=290, nx=Math.min(200,Math.max(P.nmax,4,Math.ceil(Math.max(FF(),P.cspec/100*FF())*Math.log(50)/M.K*1.05)));
+  const L=44,R=14,T=12,B=34,W=560,H=290, nx=Math.min(200,Math.max(P.nmax,4,Math.ceil(Math.max(FF()*Math.log(50)/M.K,nForC(P.cspec))*1.05)));
   const x=n=>L+(W-L-R)*n/nx, y=v=>T+(H-T-B)*(1-v/100);
   const grid=css("--line"), mut=css("--muted");
   for(let v=0;v<=100;v+=20){ el("line",{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:grid,"stroke-width":1},svg); const t=el("text",{x:L-6,y:y(v)+4,"text-anchor":"end"},svg); t.textContent=v+" %"; }
@@ -504,7 +507,7 @@ function drawChart(){
   let d=""; for(let i=0;i<=200;i++){ const n=nx*i/200; d+=(i?"L":"M")+x(n).toFixed(1)+","+y(100*(1-Math.exp(-M.K*n))).toFixed(1); }
   el("path",{d,fill:"none",stroke:css("--theory"),"stroke-width":2.5},svg);
   // n98
-  const n100=FF()*Math.log(50)/M.K, nsp=P.cspec/100*n100;
+  const n100=FF()*Math.log(50)/M.K, nsp=nForC(P.cspec);
   [[n100,FF()>1?"100 %":null],[nsp,Math.abs(P.cspec-100)>1e-9?"C = "+nf(P.cspec,0)+" %":null]].forEach(([v,lab],i)=>{ if(!lab||v>nx) return;
     el("line",{x1:x(v),x2:x(v),y1:T,y2:H-B,stroke:css("--ink"),"stroke-width":1.2,"stroke-dasharray":"2 3"},svg);
     const rt=x(v)>W-90; const t=el("text",{x:x(v)+(rt?-4:4),y:y(22+10*i),"text-anchor":rt?"end":"start"},svg); t.textContent=lab; t.setAttribute("style","fill:"+css("--ink")); });
@@ -583,9 +586,9 @@ function updateReads(){
   document.getElementById("rLam").textContent=nf(lam,3);
   document.getElementById("rMeas").textContent=nf(S.meas,1)+" %";
   document.getElementById("rTh").textContent=nf(100*(1-Math.exp(-lam)),1)+" %";
-  document.getElementById("rLev").textContent=nf(100*lam/L100(),0)+" %";
   document.getElementById("kSpecN").textContent="Passes for C = "+nf(P.cspec,0)+" %"+(FF()>1?" (1.25 × base)":"");
-  document.getElementById("rSpecN").textContent=nf(P.cspec/100*FF()*Math.log(50)/M.K,1);
+  document.getElementById("rSpecN").textContent=nf(nForC(P.cspec),1);
+  const cnf=nfCov(lam/Math.log(50),S.meas); document.getElementById("rNF").textContent=nf(cnf,cnf<100?1:0)+" %";
 }
 
 /* ---------- loop ---------- */
