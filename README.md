@@ -3,6 +3,8 @@
 **Dr Régis Kubler**, Arts et Métiers Institute of Technology
 *Developed with the assistance of Claude Opus 5.5 (Anthropic), October 2026*
 
+**User guide (PDF):** [local_coverage_guide.pdf](docs/local_coverage_guide.pdf), online at https://rkubler.github.io/peening-coverage/docs/local_coverage_guide.pdf. LaTeX sources in [`docs/`](docs/).
+
 ![Shot peening process: media flow rate ṁ, jet size ΔX, feed V (sizes not to scale)](shot_peening_process.gif)
 
 Interactive educational tool showing how surface coverage builds up during
